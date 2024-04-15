@@ -1,87 +1,75 @@
-﻿using Xunit;
-using Moq;
-using Microsoft.AspNetCore.Mvc;
-using ClassSchedule.Models;
-using ClassSchedule.Controllers;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Threading;
+using ClassSchedule.Models;
+using System.Linq;
 
-public class HomeControllerTests
+namespace ClassSchedule.Controllers
 {
-    private readonly Mock<IHttpContextAccessor> mockHttpContextAccessor;
-    private readonly Mock<ClassScheduleContext> mockContext;
-    private readonly HomeControllerTests ontroller;
-
-    public HomeControllerTests()
+    public class HomeController : Controller
     {
-        // Create mock for IHttpContextAccessor
-        mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
-        var httpContext = new DefaultHttpContext();
-        httpContext.Session = new MockHttpSession(); // Ensure the session is set up correctly.
-        mockHttpContextAccessor.Setup(_ => _.HttpContext).Returns(httpContext);
+        private readonly ClassScheduleUnitOfWork data;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        // Create mock for ClassScheduleContext (if it's your Entity Framework context)
-        mockContext = new Mock<ClassScheduleContext>();
-
-        // Create the HomeController with mocked dependencies
-        controller = new HomeController(mockContext.Object, mockHttpContextAccessor.Object);
-    }
-
-    [Fact]
-    public void Index_ActionMethod_ReturnsAViewResult()
-    {
-        // Act
-        var result = controller.Index() as ViewResult;
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.IsType<ViewResult>(result);
-    }
-
-    // MockHttpSession class defined within HomeControllerTests
-    private class MockHttpSession : ISession
-    {
-        private Dictionary<string, object> _sessionStorage = new Dictionary<string, object>();
-        public string Id => "test_session_id";
-        public bool IsAvailable => true;
-        public IEnumerable<string> Keys => _sessionStorage.Keys;
-
-        public void Clear()
+        public HomeController(ClassScheduleContext ctx, IHttpContextAccessor httpContextAccessor)
         {
-            _sessionStorage.Clear();
+            data = new ClassScheduleUnitOfWork(ctx);
+            _httpContextAccessor = httpContextAccessor;
         }
 
-        public Task CommitAsync(CancellationToken cancellationToken = default(CancellationToken))
+        public ViewResult Index(int id)
         {
-            return Task.CompletedTask;
-        }
-
-        public Task LoadAsync(CancellationToken cancellationToken = default(CancellationToken))
-        {
-            return Task.CompletedTask;
-        }
-
-        public void Remove(string key)
-        {
-            _sessionStorage.Remove(key);
-        }
-
-        public void Set(string key, byte[] value)
-        {
-            _sessionStorage[key] = value;
-        }
-
-        public bool TryGetValue(string key, out byte[] value)
-        {
-            if (_sessionStorage.TryGetValue(key, out object objValue))
+            // Set or get the current day ID from session
+            if (id > 0)
             {
-                value = (byte[])objValue;
-                return true;
+                _httpContextAccessor.HttpContext.Session.SetInt32("dayid", id);
             }
-            value = null;
-            return false;
+            else
+            {
+                id = _httpContextAccessor.HttpContext.Session.GetInt32("dayid") ?? 0;
+            }
+
+            // Load days for view bag
+            var dayOptions = new QueryOptions<Day>
+            {
+                OrderBy = d => d.DayId
+            };
+            ViewBag.Days = data.Days.List(dayOptions);
+
+            // Query classes based on the current day ID
+            var classOptions = new QueryOptions<Class>
+            {
+                Includes = "Teacher, Day"
+            };
+
+            if (id == 0)
+            {
+                classOptions.OrderBy = c => c.DayId;
+            }
+            else
+            {
+                classOptions.Where = c => c.DayId == id;
+                classOptions.OrderBy = c => c.MilitaryTime;
+            }
+
+            var classes = data.Classes.List(classOptions);
+            return View(classes);
+        }
+
+        public IActionResult Cancel()
+        {
+            int? dayId = _httpContextAccessor.HttpContext.Session.GetInt32("dayid");
+            if (dayId.HasValue)
+            {
+                return RedirectToAction("Index", new { id = dayId.Value });
+            }
+            return RedirectToAction("Index");
+        }
+
+        public IActionResult SomeAction()
+        {
+            var sessionValue = _httpContextAccessor.HttpContext.Session.GetInt32("dayid");
+            // Additional logic based on sessionValue
+            return View();
         }
     }
 }

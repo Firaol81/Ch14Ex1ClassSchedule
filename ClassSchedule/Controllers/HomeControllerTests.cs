@@ -1,31 +1,37 @@
 ﻿using Xunit;
 using Moq;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using ClassSchedule.Models;
 using ClassSchedule.Controllers;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Threading;
 
 public class HomeControllerTests
 {
+    private readonly HomeController controller;
     private readonly Mock<IHttpContextAccessor> mockHttpContextAccessor;
     private readonly Mock<ClassScheduleContext> mockContext;
-    private readonly HomeController controller;
+    private readonly Mock<ClassScheduleUnitOfWork> mockUnitOfWork;
 
     public HomeControllerTests()
     {
-        // Create a mock HttpContextAccessor
+        // Mock the HttpContextAccessor
         mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
         var httpContext = new DefaultHttpContext();
-        httpContext.Session = new MockHttpSession(); // Mock session if needed
+        httpContext.Session = new MockHttpSession(); // MockHttpSession should be defined to mimic HttpSession functionality
         mockHttpContextAccessor.Setup(_ => _.HttpContext).Returns(httpContext);
 
-        // Create a mock for the ClassScheduleContext (assuming this is your EF context)
+        // Mock the ClassScheduleContext
         mockContext = new Mock<ClassScheduleContext>();
 
-        // Initialize HomeController with mocked dependencies
+        // Mock the ClassScheduleUnitOfWork
+        mockUnitOfWork = new Mock<ClassScheduleUnitOfWork>(mockContext.Object);
+
+        // Setup mock data or behavior if needed
+        mockUnitOfWork.Setup(m => m.Days.List(It.IsAny<QueryOptions<Day>>())).Returns(new List<Day>());
+        mockUnitOfWork.Setup(m => m.Classes.List(It.IsAny<QueryOptions<Class>>())).Returns(new List<Class>());
+
+        // Initialize the HomeController with mocked dependencies
         controller = new HomeController(mockContext.Object, mockHttpContextAccessor.Object);
     }
 
@@ -33,45 +39,42 @@ public class HomeControllerTests
     public void Index_ActionMethod_ReturnsAViewResult()
     {
         // Act
-        var result = controller.Index();
+        var result = controller.Index(0);
 
         // Assert
         Assert.IsType<ViewResult>(result);
     }
 
-    // Helper class to mock session
-    private class MockHttpSession : ISession
+    [Fact]
+    public void Index_ActionMethod_SetsSessionCorrectly_WhenIdGreaterThanZero()
     {
-        private Dictionary<string, object> _sessionStorage = new Dictionary<string, object>();
-        public string Id => "testsessionid";
-        public bool IsAvailable => true;
-        public IEnumerable<string> Keys => _sessionStorage.Keys;
+        // Arrange
+        int testId = 1;
+        var sessionMock = Mock.Get((ISession)mockHttpContextAccessor.Object.HttpContext.Session);
+        sessionMock.Setup(s => s.SetInt32("dayid", testId)).Verifiable();
 
-        public void Clear() => _sessionStorage.Clear();
+        // Act
+        var result = controller.Index(testId);
 
-        public Task CommitAsync(CancellationToken cancellationToken = default(CancellationToken))
-        {
-            return Task.CompletedTask;
-        }
+        // Assert
+        sessionMock.Verify(s => s.SetInt32("dayid", testId), Times.Once);
+    }
 
-        public Task LoadAsync(CancellationToken cancellationToken = default(CancellationToken))
-        {
-            return Task.CompletedTask;
-        }
+    [Fact]
+    public void Cancel_Action_RedirectsToIndex()
+    {
+        // Arrange
+        int testId = 1;
+        var sessionMock = Mock.Get((ISession)mockHttpContextAccessor.Object.HttpContext.Session);
+        sessionMock.Setup(s => s.GetInt32("dayid")).Returns(testId);
 
-        public void Remove(string key) => _sessionStorage.Remove(key);
+        // Act
+        var result = controller.Cancel() as RedirectToActionResult;
 
-        public void Set(string key, byte[] value) => _sessionStorage[key] = value;
-
-        public bool TryGetValue(string key, out byte[] value)
-        {
-            if (_sessionStorage.ContainsKey(key))
-            {
-                value = (byte[])_sessionStorage[key];
-                return true;
-            }
-            value = null;
-            return false;
-        }
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("Index", result.ActionName);
+        Assert.Equal(testId, result.RouteValues["id"]);
     }
 }
+

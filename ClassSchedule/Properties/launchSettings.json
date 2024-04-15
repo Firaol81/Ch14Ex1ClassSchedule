@@ -18,7 +18,7 @@
     "ClassSchedule": {
       "commandName": "Project",
       "launchBrowser": true,
-      "applicationUrl": "https://localhost:5001;http://localhost:5098",
+      "applicationUrl": "https://localhost:5001;http://localhost:5099",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
