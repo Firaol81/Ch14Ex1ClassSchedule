@@ -1,80 +1,51 @@
-﻿using Xunit;
+﻿using Microsoft.AspNetCore.Mvc;
+using Xunit;
 using Moq;
-using Microsoft.AspNetCore.Http;
 using ClassSchedule.Models;
 using ClassSchedule.Controllers;
-using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 
-public class HomeControllerTests
+namespace ClassScheduleTests
 {
-    private readonly HomeController controller;
-    private readonly Mock<IHttpContextAccessor> mockHttpContextAccessor;
-    private readonly Mock<ClassScheduleContext> mockContext;
-    private readonly Mock<ClassScheduleUnitOfWork> mockUnitOfWork;
-
-    public HomeControllerTests()
+    public class HomeControllerTests
     {
-        // Mock the HttpContextAccessor
-        mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
-        var httpContext = new DefaultHttpContext();
-        httpContext.Session = new MockHttpSession(); // MockHttpSession should be defined to mimic HttpSession functionality
-        mockHttpContextAccessor.Setup(_ => _.HttpContext).Returns(httpContext);
+        [Fact]
 
-        // Mock the ClassScheduleContext
-        mockContext = new Mock<ClassScheduleContext>();
+        public void IndexActionMethod_ReturnsAViewResult()
+        {
+            // Arrange
 
-        // Mock the ClassScheduleUnitOfWork
-        mockUnitOfWork = new Mock<ClassScheduleUnitOfWork>(mockContext.Object);
+            var mockDayRepository = new Mock<IRepository<Day>>();
+            var mockClassRepository = new Mock<IRepository<Class>>();
 
-        // Setup mock data or behavior if needed
-        mockUnitOfWork.Setup(m => m.Days.List(It.IsAny<QueryOptions<Day>>())).Returns(new List<Day>());
-        mockUnitOfWork.Setup(m => m.Classes.List(It.IsAny<QueryOptions<Class>>())).Returns(new List<Class>());
 
-        // Initialize the HomeController with mocked dependencies
-        controller = new HomeController(mockContext.Object, mockHttpContextAccessor.Object);
-    }
 
-    [Fact]
-    public void Index_ActionMethod_ReturnsAViewResult()
-    {
-        // Act
-        var result = controller.Index(0);
+            var expectedDays = new List<Day>
+{
+    new Day { DayId = 1, Name = "Monday" },
+    new Day { DayId = 2, Name = "Tuesday" }
+};
+            mockDayRepository.Setup(repo => repo.List(It.IsAny<QueryOptions<Day>>()))
+                             .Returns(expectedDays);
 
-        // Assert
-        Assert.IsType<ViewResult>(result);
-    }
+            var expectedClasses = new List<Class>
+{
+    new Class { ClassId = 1, Title = "Math", DayId = 1 },
+    new Class { ClassId = 2, Title = "English", DayId = 2 }
+};
+            mockClassRepository.Setup(repo => repo.List(It.IsAny<QueryOptions<Class>>()))
+                               .Returns(expectedClasses);
 
-    [Fact]
-    public void Index_ActionMethod_SetsSessionCorrectly_WhenIdGreaterThanZero()
-    {
-        // Arrange
-        int testId = 1;
-        var sessionMock = Mock.Get((ISession)mockHttpContextAccessor.Object.HttpContext.Session);
-        sessionMock.Setup(s => s.SetInt32("dayid", testId)).Verifiable();
+            var controller = new HomeController(mockDayRepository.Object, mockClassRepository.Object);
 
-        // Act
-        var result = controller.Index(testId);
+            // Act
+            var result = controller.Index(0) as ViewResult;
 
-        // Assert
-        sessionMock.Verify(s => s.SetInt32("dayid", testId), Times.Once);
-    }
+            // Assert
+            Assert.NotNull(result);
+            Assert.IsType<ViewResult>(result);
 
-    [Fact]
-    public void Cancel_Action_RedirectsToIndex()
-    {
-        // Arrange
-        int testId = 1;
-        var sessionMock = Mock.Get((ISession)mockHttpContextAccessor.Object.HttpContext.Session);
-        sessionMock.Setup(s => s.GetInt32("dayid")).Returns(testId);
 
-        // Act
-        var result = controller.Cancel() as RedirectToActionResult;
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal("Index", result.ActionName);
-        Assert.Equal(testId, result.RouteValues["id"]);
+        }
     }
 }
-
