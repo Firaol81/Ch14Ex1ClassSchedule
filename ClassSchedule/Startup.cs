@@ -3,8 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using ClassSchedule.Models;
-using Microsoft.AspNetCore.Http;
-using System;
 
 namespace ClassSchedule
 {
@@ -17,19 +15,29 @@ namespace ClassSchedule
 
         public IConfiguration Configuration { get; }
 
+        // Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
 
+            services.AddMemoryCache();
+            services.AddSession();
+
             services.AddDbContext<ClassScheduleContext>(options =>
                 options.UseSqlServer(Configuration.GetConnectionString("ClassScheduleContext")));
 
-            services.AddScoped<IClassScheduleUnitOfWork, ClassScheduleUnitOfWork>();  // Ensure this is correct
+            //repository t with scpoped lifetime
             services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-            services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>(); // Ensure services are correctly registered
+
+            services.AddScoped<IRepository<Class>, Repository<Class>>();
+            services.AddScoped<IRepository<Day>, Repository<Day>>();
+            services.AddScoped<IRepository<Teacher>, Repository<Teacher>>();
+
+
+
         }
 
-
+        // Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app)
         {
             app.UseDeveloperExceptionPage();
@@ -37,6 +45,7 @@ namespace ClassSchedule
             app.UseStaticFiles();
 
             app.UseRouting();
+
             app.UseSession();
 
             app.UseEndpoints(endpoints =>
